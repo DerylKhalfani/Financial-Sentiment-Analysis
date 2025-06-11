@@ -1,6 +1,35 @@
 from transformers import pipeline
 import requests, os
 
+def is_relevant_article(article, keyword, min_mentions=5, check_conclusion=False):
+    content = article.get('content') or ''
+    title = article.get('title') or ''
+    description = article.get('description') or ''
+
+    keyword_lower = keyword.lower()
+    keyword_count = content.lower().count(keyword_lower)
+
+    if check_conclusion:
+        words = content.lower().split()
+        conclusion = ' '.join(words[-200:])
+        keyword_in_conclusion = keyword_lower in conclusion
+    else:
+        keyword_in_conclusion = True
+
+    # high impact words that might affect bitcoin price
+    impact_terms = [
+        "regulation", "ban", "etf", "adoption", "hack", "inflation",
+        "fed", "lawsuit", "approval", "sec", "institution", "elon"
+    ]
+
+    impact_present = any(term in content.lower() for term in impact_terms)
+
+    # check that bitcoin must appear in both title and description
+    if keyword_lower not in title.lower() or keyword_lower not in description.lower():
+        return False
+
+    return keyword_in_conclusion and (impact_present or keyword_count >= min_mentions)
+
 def fetch_articles(keyword, date, api_key):
     url = (
         'https://newsapi.org/v2/everything?'
@@ -19,7 +48,9 @@ def fetch_articles(keyword, date, api_key):
     articles = response.json().get("articles", [])
 
     return [article for article in articles
-            if keyword.lower() in article['title'].lower() or keyword.lower() in article['description'].lower()]
+            ### CHANGE THIS PARAMETER FOR FILTER
+            # min_mentions = 2 is good because its more balanced
+            if is_relevant_article(article, keyword, min_mentions=2, check_conclusion=True)]
 
 def analyze_sentiment(articles, pipe):
     results = []
@@ -39,7 +70,7 @@ def count_sentiments(results):
             score -= sentiment['score']
         count += 1
     if count == 0:
-        return "Neutral"
+        return "Neutral", 0.0, 0
     avg = score / count
     label = 'Positive' if avg > 0.15 else 'Negative' if avg < -0.15 else 'Neutral'
     return label, avg, count
@@ -60,6 +91,7 @@ for article, sentiment in results:
     print(f'Article: {article["title"]}, Label: {sentiment["label"]}, Score: {sentiment["score"]} \n {'-'*40}')
 
 labels, avg_score, art_count = count_sentiments(results)
-print(f'Articles Count: {art_count}'
+
+print(f'Articles Count: {art_count}\n'
       f'Overall Sentiment: {labels}\n'
       f'Average Score: {avg_score:.4f}')
