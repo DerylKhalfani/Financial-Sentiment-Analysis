@@ -1,8 +1,6 @@
 from transformers import pipeline
 import requests, os
-from datetime import datetime, UTC, date
-
-
+from datetime import datetime, UTC
 
 def fear_greed_index(limit=1):
     """
@@ -23,8 +21,10 @@ def fear_greed_index(limit=1):
                 score = int(data["value"])
                 classification = data["value_classification"]
                 timestamp = data["timestamp"]
+                date_obj = datetime.strptime(timestamp, "%m-%d-%Y")
+                formatted_date = date_obj.strftime("%m%d%Y")
 
-                results.append((score, classification, timestamp))
+                results.append((score, classification, formatted_date))
 
             return results
         else:
@@ -124,17 +124,48 @@ def count_sentiments(results):
 
     # no valid articles
     if count == 0:
-        return "Neutral", 0.0, 0
+        return "Neutral", 0.0, 0, 0
 
     avg = score / count
 
+    # change limit for how many index to get (count backwards)
+    fg_index = fear_greed_index(limit=1)
+
+    for score, classification, formatted_date in fg_index:
+        fg_score = score / 100
+        fg_classification = classification
+        fg_date = formatted_date
+
+    print(fg_score, fg_classification, fg_date)
+
     # thresholds
     label = 'Positive' if avg > 0.15 else 'Negative' if avg < -0.15 else 'Neutral'
-    return label, avg, count
+
+    if label == 'Positive':
+        if fg_classification == 'Extreme Greed':
+            # 75-100
+            avg_fg = (fg_score * 0.3) + (avg * 0.7)
+        elif fg_classification == 'Greed':
+            # 50 - 75
+            avg_fg = (fg_score * 0.2) + (avg * 0.8)
+        else:
+            avg = avg
+
+    if label == 'Negative':
+        if fg_classification == 'Fear':
+            avg_fg = (fg_score * 0.2) + (avg * 0.8)
+
+        elif fg_classification == 'Extreme Fear':
+            avg_fg = (fg_score * 0.3) + (avg * 0.7)
+
+        else:
+            avg = avg
+
+    return label, avg, avg_fg, count
 
 # MAIN CODE
 keyword = 'bitcoin' # Part of filtering process for the article
-date = '2025-06-9'
+date = '2025-06-10' # 24 hour delay because its free
 
 API_KEY = os.getenv('API_KEY') or open('API_KEY').read().strip()
 
@@ -146,8 +177,10 @@ results = analyze_sentiment(articles, pipe)
 for article, sentiment in results:
     print(f'Article: {article["title"]}, Label: {sentiment["label"]}, Score: {sentiment["score"]} \n {'-'*40}')
 
-labels, avg_score, art_count = count_sentiments(results)
+labels, avg_score, avg_fg_score, art_count = count_sentiments(results)
 
 print(f'Articles Count: {art_count}\n'
       f'Overall Sentiment: {labels}\n'
-      f'Average Score: {avg_score:.4f}')
+      f'Average Score: {avg_score:.4f}\n'
+      f'Average Score with Fear and Greed: {avg_fg_score:.4f}'
+      )
