@@ -2,6 +2,8 @@ from transformers import pipeline
 import requests, os
 from datetime import datetime, UTC
 
+##### FILTER and SENTIMENT ANALYSIS
+
 def fear_greed_index(limit=1):
     """
     :param limit: is for how many items (data value) to return
@@ -136,7 +138,7 @@ def count_sentiments(results):
         fg_classification = classification
         fg_date = formatted_date
 
-    print(fg_score, fg_classification, fg_date)
+    # print(fg_score, fg_classification, fg_date)
 
     # thresholds
     label = 'Positive' if avg > 0.15 else 'Negative' if avg < -0.15 else 'Neutral'
@@ -162,6 +164,16 @@ def count_sentiments(results):
             avg = avg
 
     return label, avg, avg_fg, count
+
+##### GENERATE SIGNAL
+
+def generate_signal(avg_fg_score, threshold_positive=0.4, threshold_negative=0.4):
+    if avg_fg_score >= threshold_positive:
+        return "BUY"
+    elif avg_fg_score >= threshold_negative:
+        return "SELL"
+    else:
+        return "HOLD"
 
 # MAIN CODE
 keyword = 'bitcoin' # Part of filtering process for the article
