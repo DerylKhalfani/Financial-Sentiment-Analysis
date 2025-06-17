@@ -1,6 +1,7 @@
 from transformers import pipeline
 import requests, os
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
+import csv
 
 ##### FILTER and SENTIMENT ANALYSIS
 
@@ -143,6 +144,8 @@ def count_sentiments(results):
     # thresholds
     label = 'Positive' if avg > 0.15 else 'Negative' if avg < -0.15 else 'Neutral'
 
+    avg_fg = avg
+
     if label == 'Positive':
         if fg_classification == 'Extreme Greed':
             # 75-100
@@ -183,16 +186,42 @@ API_KEY = os.getenv('API_KEY') or open('API_KEY').read().strip()
 
 pipe = pipeline("text-classification", model = "ProsusAI/finbert")
 
-articles = fetch_articles(keyword, date, API_KEY)
-results = analyze_sentiment(articles, pipe)
+### FOR ONE USE ONLY
+# articles = fetch_articles(keyword, date, API_KEY)
+# results = analyze_sentiment(articles, pipe)
+#
+# for article, sentiment in results:
+#     print(f'Article: {article["title"]}, Label: {sentiment["label"]}, Score: {sentiment["score"]} \n {'-'*40}')
+#
+# labels, avg_score, avg_fg_score, art_count = count_sentiments(results)
+#
+# print(f'Articles Count: {art_count}\n'
+#       f'Overall Sentiment: {labels}\n'
+#       f'Average Score: {avg_score:.4f}\n'
+#       f'Average Score with Fear and Greed: {avg_fg_score:.4f}'
+#       )
 
-for article, sentiment in results:
-    print(f'Article: {article["title"]}, Label: {sentiment["label"]}, Score: {sentiment["score"]} \n {'-'*40}')
+### GENERATING CSV WITH DATE, AVG_FG_SCORE, SIGNAL FOR BACKTEST
+API_KEY = os.getenv('API_KEY') or open('API_KEY').read().strip()
+start_date = datetime.strptime('2025-06-10', '%Y-%m-%d')
+end_date = datetime.strptime("2025-06-16", "%Y-%m-%d")
 
-labels, avg_score, avg_fg_score, art_count = count_sentiments(results)
+output = []
 
-print(f'Articles Count: {art_count}\n'
-      f'Overall Sentiment: {labels}\n'
-      f'Average Score: {avg_score:.4f}\n'
-      f'Average Score with Fear and Greed: {avg_fg_score:.4f}'
-      )
+while start_date <= end_date:
+    date_str = start_date.strftime('%Y-%m-%d')
+
+    articles = fetch_articles(keyword, date, API_KEY)
+    results = analyze_sentiment(articles, pipe)
+
+    label, avg_score, avg_fg_score, art_count = count_sentiments(results)
+    signal = generate_signal(avg_fg_score)
+
+    output.append([date_str, round(avg_fg_score, 4), signal])
+
+    start_date += timedelta(days=1)
+
+with open("sentiment_signals.csv", "w", newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(["date", "avg_fg_score", "signal"])
+    writer.writerows(output)
