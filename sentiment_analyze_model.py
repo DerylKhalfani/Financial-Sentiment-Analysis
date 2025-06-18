@@ -99,7 +99,7 @@ def fetch_articles(keyword, date, api_key):
     return [article for article in articles
             ### CHANGE THIS PARAMETER FOR FILTER
             # min_mentions = 2 is good because its more balanced
-            if is_relevant_article(article, keyword, min_mentions=2, check_conclusion=True)]
+            if is_relevant_article(article, keyword, min_mentions=1, check_conclusion=True)]
 
 def analyze_sentiment(articles, pipe):
 
@@ -149,10 +149,16 @@ def count_sentiments(results):
     if label == 'Positive':
         if fg_classification == 'Extreme Greed':
             # 75-100
-            avg_fg = (fg_score * 0.3) + (avg * 0.7)
+            avg_fg = (fg_score * 0.5) + (avg * 0.5)
         elif fg_classification == 'Greed':
             # 50 - 75
-            avg_fg = (fg_score * 0.2) + (avg * 0.8)
+            avg_fg = (fg_score * 0.35) + (avg * 0.65)
+        elif fg_classification == 'Fear':
+            # 25-50
+            avg_fg = (avg * 0.6) - (fg_score * 0.4)
+        elif fg_classification == 'Extreme Fear':
+            # 0-25
+            avg_fg = (avg * 0.3) - (fg_score * 0.9)
         else:
             avg = avg
 
@@ -162,6 +168,12 @@ def count_sentiments(results):
 
         elif fg_classification == 'Extreme Fear':
             avg_fg = (fg_score * 0.3) + (avg * 0.7)
+        elif fg_classification == 'Extreme Greed':
+            # 75-100
+            avg_fg = (fg_score * 0.75) + (avg * 0.4)
+        elif fg_classification == 'Greed':
+            # 50 - 75
+            avg_fg = (fg_score * 0.5) + (avg * 0.5)
 
         else:
             avg = avg
@@ -170,7 +182,7 @@ def count_sentiments(results):
 
 ##### GENERATE SIGNAL
 
-def generate_signal(avg_fg_score, threshold_positive=0.4, threshold_negative=0.4):
+def generate_signal(avg_fg_score, threshold_positive=0.3, threshold_negative=0.3):
     if avg_fg_score >= threshold_positive:
         return "BUY"
     elif avg_fg_score >= threshold_negative:
@@ -180,7 +192,7 @@ def generate_signal(avg_fg_score, threshold_positive=0.4, threshold_negative=0.4
 
 # MAIN CODE
 keyword = 'bitcoin' # Part of filtering process for the article
-date = '2025-06-10' # 24 hour delay because its free
+# date = '2025-05-27' # 24 hour delay because its free
 
 API_KEY = os.getenv('API_KEY') or open('API_KEY').read().strip()
 
@@ -202,22 +214,22 @@ pipe = pipeline("text-classification", model = "ProsusAI/finbert")
 #       )
 
 ### GENERATING CSV WITH DATE, AVG_FG_SCORE, SIGNAL FOR BACKTEST
-API_KEY = os.getenv('API_KEY') or open('API_KEY').read().strip()
-start_date = datetime.strptime('2025-06-10', '%Y-%m-%d')
-end_date = datetime.strptime("2025-06-16", "%Y-%m-%d")
+start_date = datetime.strptime('2025-05-18', '%Y-%m-%d')
+end_date = datetime.strptime("2025-06-15", "%Y-%m-%d")
 
 output = []
 
 while start_date <= end_date:
     date_str = start_date.strftime('%Y-%m-%d')
 
-    articles = fetch_articles(keyword, date, API_KEY)
+    print(date_str)
+    articles = fetch_articles(keyword, date_str, API_KEY)
     results = analyze_sentiment(articles, pipe)
 
     label, avg_score, avg_fg_score, art_count = count_sentiments(results)
-    signal = generate_signal(avg_fg_score)
+    signal = generate_signal(avg_fg_score, 0.28, 0.28)
 
-    output.append([date_str, round(avg_fg_score, 4), signal])
+    output.append([date_str, avg_fg_score, signal])
 
     start_date += timedelta(days=1)
 
